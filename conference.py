@@ -14,7 +14,6 @@ __author__ = 'wesc+api@google.com (Wesley Chun)'
 
 
 from datetime import datetime
-
 import endpoints
 import logging
 from protorpc import messages
@@ -90,6 +89,11 @@ CONF_POST_REQUEST = endpoints.ResourceContainer(
     websafeConferenceKey=messages.StringField(1),
 )
 
+SESS_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    websafeSessionKey=messages.StringField(1),
+)
+
 SESS_SPEAKER_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
     speaker=messages.StringField(1),
@@ -99,6 +103,11 @@ SESS_TYPE_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
     websafeConferenceKey=messages.StringField(1),
     typeOfSession=messages.StringField(2),
+)
+
+PROFILE_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    mainEmail=messages.StringField(1)
 )
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -576,7 +585,7 @@ class ConferenceApi(remote.Service):
         for field in sf.all_fields():
             if hasattr(sess, field.name):
                 # convert Date to date string; just copy others
-                if (field.name.endswith('date')) or (field.name.endswith('time')):
+                if (field.name.endswith('date')) or (field.name.endswith('Time')):
                     setattr(sf, field.name, str(getattr(sess, field.name)))
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
@@ -688,4 +697,120 @@ class ConferenceApi(remote.Service):
         return self._createSessionObject(request)
 
     # - - - Session wishlists - - - - - - - - - - - - - - - - - - - -
+
+    @ndb.transactional(xg=True)
+    def _sessionRegistration(self, request, reg=True):
+        """Register or unregister user for selected conference."""
+        retval = None
+        prof = self._getProfileFromUser() # get user Profile
+
+        # check if session exists given websafeSessionfKey
+        # get conference; check that it exists
+        wssk = request.websafeSessionKey
+        sess = ndb.Key(urlsafe=wssk).get()
+        if not sess:
+            raise endpoints.NotFoundException(
+                'No session found with key: %s' % wssk)
+
+        # register
+        if reg:
+            # check if user already registered otherwise add
+            if wssk in prof.conferenceKeysToAttend:
+                raise ConflictException(
+                    "You have already registered for this session")
+            # register user, take away one seat
+            prof.sessionKeysToAttend.append(wssk)
+            retval = True
+
+        # unregister
+        else:
+            # check if user already registered
+            if wssk in prof.sessionKeysToAttend:
+
+                # unregister user, add back one seat
+                prof.sessionKeysToAttend.remove(wssk)
+                retval = True
+            else:
+                retval = False
+
+        # write things back to the datastore & return
+        prof.put()
+        sess.put()
+        return BooleanMessage(data=retval)
+
+    # Wishlist endpoints
+    @endpoints.method(SESS_GET_REQUEST, BooleanMessage,
+            path='wishlist/add',
+            http_method='POST', name='addSessionToWishlist')
+    def addSessionToWishlist(self, request):
+        """Add session to logged user wishlist by key."""
+        return self._sessionRegistration(request)
+
+    @endpoints.method(message_types.VoidMessage, SessionForms, path='wishlist/get',
+            http_method='POST', name='getSessionsInWishlist')
+    def getSessionsInWishlist(self, request):
+        """Get all session of logged user wishlist."""
+        prof = self._getProfileFromUser() # get user Profile
+        sess_keys = [ndb.Key(urlsafe=wssk) for wssk in prof.sessionKeysToAttend]
+        sessions = ndb.get_multi(sess_keys)
+
+        # return set of ConferenceForm objects per Conference
+        return SessionForms(items=[self._copySessionToForm(sess)\
+         for sess in sessions]
+        )
+
+    @endpoints.method(PROFILE_GET_REQUEST, ProfileForm,
+            path='profiles/{mainEmail}', http_method='POST', name='getProfileByEmail')
+    def getProfileByEmail(self,request):
+        """Get profile with a user email"""
+        #get all sessions
+        q = Profile.query(Profile.mainEmail == request.mainEmail)
+        profile = q.get()
+        if not profile:
+            raise endpoints.NotFoundException(
+                'No user found with email: %s' % request.mainEmail)
+        # return set of ConferenceForm objects per Conference
+        return self._copyProfileToForm(profile)
+
+    @endpoints.method(message_types.VoidMessage, ConferenceForm,
+            path='conferences/next', http_method='POST', name='getNextConference')
+    def getNextConference(self,request):
+        """Get next conference to start from current time"""
+        #get all sessions
+        q = Conference.query()
+        q = q.filter(Conference.startDate >= datetime.today())
+        q = q.order(Conference.startDate)
+        conf = q.get()
+        if not conf:
+            raise endpoints.NotFoundException(
+                'No conference found')
+        prof = conf.key.parent().get()
+        # return ConferenceForm
+        return self._copyConferenceToForm(conf, getattr(prof, 'displayName'))
+
+    # One inequality filter at most on one property
+    # A property with an inequality filter must be sorted first
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+            path='sessions/nonworkshops/before7', http_method='POST', name='nonWorkshopsBefore7')
+    def nonWorkshopsBefore7(self,request):
+        """Get next conference to start from current time"""
+        #get all sessions
+        q = Session.query()
+        time = datetime.strptime('19:00', "%H:%M").time()
+        q = q.filter(Session.startTime <= time)
+        q = q.order(Session.startTime)
+        #q = q.filter(Session.typeOfSession != 'workshop')
+        sessions = q.fetch()
+        if not sessions:
+            raise endpoints.NotFoundException(
+                'No sessions found')
+
+        for sess in sessions:
+            if sess.typeOfSession == 'workshop':
+                sessions.remove(sess)
+        # return set of SessionForm objects per Session
+        return SessionForms(
+            items=[self._copySessionToForm(sess) for sess in sessions]
+        )
+
 api = endpoints.api_server([ConferenceApi]) # register API
