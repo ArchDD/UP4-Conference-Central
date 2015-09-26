@@ -13,6 +13,14 @@ The Session class is modelled similarly to the existing Conference class for con
 
 Speakers of sessions are set as string properties. This was chosen over using profiles as the speakers themselves may not have registered on the app. The speaker field is also intended to be versatile, as there could be multiple speakers or corner cases that may lead to unusual input values (unidentifiable speaker or multiple aliases)
 
+## Additional Queries
+
+### getProfileByEmail
+This query checks whether a profile associated with the email address provided. It would be useful for users who are searching for other members they may know using email or an API service that automatically scans through an authed user's friendlist and retrieving emails to search.
+
+### getNextConference
+This query uses the current time to establish the next conference to be held and returns that conference to the user. A user may be interested in the next conference to be held, and the query synergises well with the announcement feature where both indicate shortly upcoming events.
+
 ## Software Requirements & API information
 
 - Python 2.7.10
