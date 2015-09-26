@@ -7,13 +7,7 @@ An App Engine application developed for users to create and register for confere
 - [Creators](#creators)
 - [Copyright and license](#copyright-and-license)
 
-### What's included
-
-```
- - 
-```
-
-## Software Requirements
+## Software Requirements & API information
 
 - Python 2.7.10
 
