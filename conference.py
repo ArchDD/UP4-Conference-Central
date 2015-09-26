@@ -81,6 +81,7 @@ FIELDS =    {
             'MAX_ATTENDEES': 'maxAttendees',
             }
 
+# Request data containers for endpoint methods
 CONF_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
     websafeConferenceKey=messages.StringField(1),
@@ -584,6 +585,7 @@ class ConferenceApi(remote.Service):
     def _copySessionToForm(self, sess):
         """Copy relevant fields from Session to SessionForm that is web-safe ."""
         sf = SessionForm()
+        # set fields of form with attributes
         for field in sf.all_fields():
             if hasattr(sess, field.name):
                 # convert Date to date string; just copy others
@@ -591,8 +593,6 @@ class ConferenceApi(remote.Service):
                     setattr(sf, field.name, str(getattr(sess, field.name)))
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
-            elif field.name == "websafeKey":
-                setattr(sf, field.name, sess.key.urlsafe())
         sf.check_initialized()
         return sf
 
@@ -629,9 +629,6 @@ class ConferenceApi(remote.Service):
         s_id = Session.allocate_ids(size=1, parent=c_key)[0]
         s_key = ndb.Key(Session, s_id, parent=c_key)
         data['key'] = s_key
-        data['conferenceId'] = request.conferenceId = conference_id
-        del data['owningConference']
-        del data['websafeKey']
         del data['websafeConferenceKey']
 
         # create Session, enqueue check speaker task
@@ -673,6 +670,7 @@ class ConferenceApi(remote.Service):
                 'No conference found with key: %s' % request.websafeConferenceKey)
         # create ancestor query for all key matches for this conference
         sessions = Session.query(ancestor=ndb.Key(Conference, conference_id))
+        # filter by type of session
         sessions = sessions.filter(Session.typeOfSession == request.typeOfSession)
         # return set of SessionForm objects per Session
         return SessionForms(
@@ -684,6 +682,7 @@ class ConferenceApi(remote.Service):
             http_method='GET', name='getConferenceSessionsBySpeaker')
     def getConferenceSessionsBySpeaker(self, request):
         """Return all sessions by speaker."""
+        # filter by speaker property
         sessions = Session.query(Session.speaker == request.speaker)
 
         # return set of SessionForm objects per Session
@@ -701,7 +700,7 @@ class ConferenceApi(remote.Service):
 
     @ndb.transactional(xg=True)
     def _sessionRegistration(self, request, reg=True):
-        """Register or unregister user for selected conference."""
+        """Transaction to register or unregister user for selected session."""
         retval = None
         prof = self._getProfileFromUser() # get user Profile
 
@@ -719,7 +718,7 @@ class ConferenceApi(remote.Service):
             if wssk in prof.conferenceKeysToAttend:
                 raise ConflictException(
                     "You have already registered for this session")
-            # register user, take away one seat
+            # register user to attend session
             prof.sessionKeysToAttend.append(wssk)
             retval = True
 
@@ -728,7 +727,7 @@ class ConferenceApi(remote.Service):
             # check if user already registered
             if wssk in prof.sessionKeysToAttend:
 
-                # unregister user, add back one seat
+                # unregister user, remove session to attend
                 prof.sessionKeysToAttend.remove(wssk)
                 retval = True
             else:
@@ -770,21 +769,25 @@ class ConferenceApi(remote.Service):
         if not profile:
             raise endpoints.NotFoundException(
                 'No user found with email: %s' % request.mainEmail)
-        # return set of ConferenceForm objects per Conference
+        # return ProfileForm object
         return self._copyProfileToForm(profile)
 
     @endpoints.method(message_types.VoidMessage, ConferenceForm,
             path='conferences/next', http_method='POST', name='getNextConference')
     def getNextConference(self,request):
-        """Get next conference to start from current time"""
-        #get all sessions
+        """Get next conference to start from user's current time"""
+        # Query conferences
         q = Conference.query()
+        # filter away past conferences
         q = q.filter(Conference.startDate >= datetime.today())
+        # order by date
         q = q.order(Conference.startDate)
+        # get earliest conference
         conf = q.get()
         if not conf:
             raise endpoints.NotFoundException(
                 'No conference found')
+        # get organizer profile for display name
         prof = conf.key.parent().get()
         # return ConferenceForm
         return self._copyConferenceToForm(conf, getattr(prof, 'displayName'))
@@ -795,17 +798,17 @@ class ConferenceApi(remote.Service):
             path='sessions/nonworkshops/before7', http_method='POST', name='nonWorkshopsBefore7')
     def nonWorkshopsBefore7(self,request):
         """Get next conference to start from current time"""
-        #get all sessions
+        # get all sessions
         q = Session.query()
+        # extract sessions before 7pm
         time = datetime.strptime('19:00', "%H:%M").time()
         q = q.filter(Session.startTime <= time)
         q = q.order(Session.startTime)
-        #q = q.filter(Session.typeOfSession != 'workshop')
         sessions = q.fetch()
         if not sessions:
             raise endpoints.NotFoundException(
                 'No sessions found')
-
+        # manually remove workshops
         for sess in sessions:
             if sess.typeOfSession == 'workshop':
                 sessions.remove(sess)
@@ -818,8 +821,8 @@ class ConferenceApi(remote.Service):
 
     @staticmethod
     def _cacheFeaturedSpeaker(speaker):
-        """Create featured speaker & assign to memcache; used by
-        memcache cron job & putFeaturedSpeaker().
+        """Checks for featured speaker & assign to memcache; used by
+        pull queue.
         """
         sessions = Session.query().filter(Session.speaker == speaker).fetch()
 
