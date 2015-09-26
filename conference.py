@@ -582,8 +582,7 @@ class ConferenceApi(remote.Service):
         for field in sf.all_fields():
             if hasattr(sess, field.name):
                 # convert Date to date string; just copy others
-                if (field.name.endswith('date'))
-                or (field.name.endswith('Time')):
+                if (field.name.endswith('date')) or (field.name.endswith('Time')):
                     setattr(sf, field.name, str(getattr(sess, field.name)))
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
