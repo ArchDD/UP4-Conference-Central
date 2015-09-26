@@ -1,15 +1,30 @@
-App Engine application for the Udacity training course.
+# Conference Central
+An App Engine application developed for users to create and register for conferences.
 
-## Products
-- [App Engine][1]
+## Table of contents
 
-## Language
-- [Python][2]
+- [Software Requirements](#Software Requirements)
+- [Creators](#creators)
+- [Copyright and license](#copyright-and-license)
 
-## APIs
-- [Google Cloud Endpoints][3]
+### What's included
+
+```
+ - 
+```
+
+## Software Requirements
+
+- Python 2.7.10
+
+- Google App Engine
+
+- Google Cloud Endpoints API
 
 ## Setup Instructions
+
+### App Engine Deployment
+
 1. Update the value of `application` in `app.yaml` to the app ID you
    have registered in the App Engine admin console and would like to use to host
    your instance of this sample.
@@ -23,10 +38,16 @@ App Engine application for the Udacity training course.
 1. (Optional) Generate your client library(ies) with [the endpoints tool][6].
 1. Deploy your application.
 
+### API Explorer Testing
+1. Access API explorer via '/apis-explorer' at end of URL
+2. Select conference API service
+3. Execute the endpoint methods with relevant fields
 
-[1]: https://developers.google.com/appengine
-[2]: http://python.org
-[3]: https://developers.google.com/appengine/docs/python/endpoints/
-[4]: https://console.developers.google.com/
-[5]: https://localhost:8080/
-[6]: https://developers.google.com/appengine/docs/python/endpoints/endpoints_tool
+## Creators
+
+**Dillon Keith Diep**
+
+
+## Copyright and license
+
+The code released was created for educational purposes, copyright and license subject to Udacity's provided source code - no other enforcements otherwise.
