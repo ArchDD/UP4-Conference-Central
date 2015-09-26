@@ -2,10 +2,16 @@
 An App Engine application developed for users to create and register for conferences.
 
 ## Table of contents
-
+- [Design Choices](#Design Choices)
 - [Software Requirements](#Software Requirements)
 - [Creators](#creators)
 - [Copyright and license](#copyright-and-license)
+
+## Design Choices
+
+The Session class is modelled similarly to the existing Conference class for consistency, with the required properties from specification and the session name being a requirement. It is designed to be simple and more lenient to match the abstract nature of Conference Central. The SessionForm class includes all properties of the Session class to prevent data loss, when creating a session the form is passed alongside with a websafeConferenceKey in the request container to define the new session and associate it with a conference ancestor.
+
+Speakers of sessions are set as string properties. This was chosen over using profiles as the speakers themselves may not have registered on the app. The speaker field is also intended to be versatile, as there could be multiple speakers or corner cases that may lead to unusual input values (unidentifiable speaker or multiple aliases)
 
 ## Software Requirements & API information
 
