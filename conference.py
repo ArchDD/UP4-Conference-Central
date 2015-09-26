@@ -1,5 +1,5 @@
+# For Udacity FS nanodegree project 4, by Dillon Keith Diep
 #!/usr/bin/env python
-
 """
 conference.py -- Udacity conference server-side Python App Engine API;
     uses Google Cloud Endpoints
@@ -54,6 +54,8 @@ API_EXPLORER_CLIENT_ID = endpoints.API_EXPLORER_CLIENT_ID
 MEMCACHE_ANNOUNCEMENTS_KEY = "RECENT_ANNOUNCEMENTS"
 ANNOUNCEMENT_TPL = ('Last chance to attend! The following conferences '
                     'are nearly sold out: %s')
+MEMCACHE_SPEAKER_KEY = "FEATURED SPEAKER"
+SPEAKER_TPL = ('%s is also speaking at the following sessions: %s')
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 DEFAULTS = {
@@ -632,11 +634,10 @@ class ConferenceApi(remote.Service):
         del data['websafeKey']
         del data['websafeConferenceKey']
 
-        # create Session, send email to organizer confirming
+        # create Session, enqueue check speaker task
         Session(**data).put()
-        taskqueue.add(params={'email': user.email(),
-            'sessionInfo': repr(request)},
-            url='/tasks/send_confirmation_email'
+        taskqueue.add(params={'speaker': data['speaker']},
+            url='/tasks/check_speaker'
         )
         return request
 
@@ -812,5 +813,37 @@ class ConferenceApi(remote.Service):
         return SessionForms(
             items=[self._copySessionToForm(sess) for sess in sessions]
         )
+
+    # - - - Featured speaker - - - - - - - - - - - - - - - - - - - -
+
+    @staticmethod
+    def _cacheFeaturedSpeaker(speaker):
+        """Create featured speaker & assign to memcache; used by
+        memcache cron job & putFeaturedSpeaker().
+        """
+        sessions = Session.query().filter(Session.speaker == speaker).fetch()
+
+        if sessions.list > 1:
+            # If there are repeated speakers,
+            # format speaker and set it in memcache
+            featuredSpeaker = SPEAKER_TPL % (
+                ', '.join(sess.sessionName for sess in sessions))
+            memcache.set(MEMCACHE_SPEAKER_KEY, featuredSpeaker)
+        else:
+            # If there are no featured speaker,
+            # delete the memcache announcements entry
+            featuredSpeaker = ""
+            memcache.delete(MEMCACHE_SPEAKER_KEY)
+
+        return featuredSpeaker
+
+
+    @endpoints.method(message_types.VoidMessage, StringMessage,
+            path='session/featuredspeaker/get',
+            http_method='GET', name='getFeaturedSpeaker')
+    def getFeaturedSpeaker(self, request):
+        """Return featured speaker from memcache."""
+        return StringMessage(data=memcache.get(MEMCACHE_SPEAKER_KEY) or "")
+
 
 api = endpoints.api_server([ConferenceApi]) # register API
