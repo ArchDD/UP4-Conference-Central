@@ -597,6 +597,12 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
         user_id = getUserId(user)
 
+        # get conference of request
+        conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
+        # check validity
+        if not conf:
+            raise endpoint.NotFoundException("Non-existing conference")
+            
         # Check if user is organizer
         if user_id != getattr(conf, 'organizerUserId'):
             msg = 'Not organizer of conference'
@@ -617,12 +623,6 @@ class ConferenceApi(remote.Service):
             st = datetime.strptime(data['startTime'][:10], "%H:%M").time()
             data['startTime'] = st
 
-        # get conference of request
-        conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
-        # check validity
-        if not conf:
-            raise endpoint.NotFoundException("Non-existing conference")
-
         conference_id = conf.key.id()
         c_key = ndb.Key(Conference, conference_id)
         s_id = Session.allocate_ids(size=1, parent=c_key)[0]
@@ -632,7 +632,8 @@ class ConferenceApi(remote.Service):
 
         # create Session, enqueue check speaker task
         Session(**data).put()
-        taskqueue.add(params={'speaker': data['speaker']},
+        taskqueue.add(params={'speaker': data['speaker'],
+                              'conference_id': conference_id},
                       url='/tasks/check_speaker')
         return request
 
@@ -829,11 +830,13 @@ class ConferenceApi(remote.Service):
     # - - - Featured speaker - - - - - - - - - - - - - - - - - - - -
 
     @staticmethod
-    def _cacheFeaturedSpeaker(speaker):
+    def _cacheFeaturedSpeaker(speaker, conference_id):
         """Checks for featured speaker & assign to memcache; used by
         pull queue.
         """
-        sessions = Session.query().filter(Session.speaker == speaker).fetch()
+        sessions = Session.query(ancestor=ndb.Key(Conference,
+                                 conference_id))
+        sessions = sessions.filter(Session.speaker == speaker).fetch()
 
         if sessions.list > 1:
             # If there are repeated speakers,
