@@ -11,7 +11,15 @@ An App Engine application developed for users to create and register for confere
 
 The Session class is modelled similarly to the existing Conference class for consistency, with the required properties from specification and the session name being a requirement. It is designed to be simple and more lenient to match the abstract nature of Conference Central. The SessionForm class includes all properties of the Session class to prevent data loss, when creating a session the form is passed alongside with a websafeConferenceKey in the request container to define the new session and associate it with a conference ancestor.
 
-Speakers of sessions are set as string properties. This was chosen over using profiles as the speakers themselves may not have registered on the app. The speaker field is also intended to be versatile, as there could be multiple speakers or corner cases that may lead to unusual input values (unidentifiable speaker or multiple aliases)
+Speakers of sessions are set as string properties. This was chosen over using profiles as the speakers themselves may not have registered on the app. The speaker field is also intended to be versatile, as there could be multiple speakers or corner cases that may lead to unusual input values (unidentifiable speaker or multiple aliases).
+
+For names, highlights, and similar fields I chose to use StringProperty as it is most appropriate to contain descriptive texts that do not require direct numeric manipulation. For dates and times I chose to use the DateProperty and Time property respectively, although combining the two to use DateTime is also possible (it may also be useful to eliminate certain query restrictions). Although duration is semantically a time, I chose to use IntegerProperty to represent the number of minutes for simple comparison and ease of presenting the data.
+
+## Query Problem
+
+"Let’s say that you don't like workshops and you don't like sessions after 7 pm. How would you handle a query for all non-workshop sessions before 7 pm? What is the problem for implementing this query? What ways to solve it did you think of?"
+
+The issue with this problem is that you cannot use inequality filters for more than one property in a query. One way to overcome this would be to use a single indexed property and using inequality filters multiple times on that property to extract the value. This requires a specific model setup so instead I chose to filter one property (preferably the one that is less expensive) and then reduce it further manually. In my implementation I filtered sessions that start before 7pm and then manually removed workshops from the list.
 
 ## Additional Queries
 
