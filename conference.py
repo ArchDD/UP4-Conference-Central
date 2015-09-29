@@ -590,6 +590,7 @@ class ConferenceApi(remote.Service):
         return sf
 
     def _createSessionObject(self, request):
+        """Allows autheticated users to create a session for a conference"""
         # get user logged in
         user = endpoints.get_current_user()
         if not user:
