@@ -586,6 +586,8 @@ class ConferenceApi(remote.Service):
                     setattr(sf, field.name, str(getattr(sess, field.name)))
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
+            elif field.name == "websafeKey":
+                    setattr(sf, field.name, sess.key.urlsafe())
         sf.check_initialized()
         return sf
 
@@ -602,7 +604,7 @@ class ConferenceApi(remote.Service):
         # check validity
         if not conf:
             raise endpoint.NotFoundException("Non-existing conference")
-            
+
         # Check if user is organizer
         if user_id != getattr(conf, 'organizerUserId'):
             msg = 'Not organizer of conference'
@@ -629,13 +631,14 @@ class ConferenceApi(remote.Service):
         s_key = ndb.Key(Session, s_id, parent=c_key)
         data['key'] = s_key
         del data['websafeConferenceKey']
+        del data['websafeKey']
 
         # create Session, enqueue check speaker task
         Session(**data).put()
         taskqueue.add(params={'speaker': data['speaker'],
                               'conference_id': conference_id},
                       url='/tasks/check_speaker')
-        return request
+        return self._copySessionToForm(s_key.get())
 
     # Session endpoints
     @endpoints.method(CONF_GET_REQUEST, SessionForms,
@@ -703,7 +706,7 @@ class ConferenceApi(remote.Service):
     # - - - Session wishlists - - - - - - - - - - - - - - - - - - - -
 
     @ndb.transactional(xg=True)
-    def _sessionRegistration(self, request, reg=True):
+    def _sessionRegistration(self, request):
         """Transaction to register or unregister user for selected session."""
         retval = None
         # get user Profile
@@ -717,30 +720,21 @@ class ConferenceApi(remote.Service):
             raise endpoints.NotFoundException(
                 'No session found with key: %s' % wssk)
 
-        # register
-        if reg:
-            # check if user already registered otherwise add
-            if wssk in prof.conferenceKeysToAttend:
-                raise ConflictException(
-                    "You have already registered for this session")
+        # check if user already registered otherwise add
+        if wssk in prof.conferenceKeysToAttend:
+            raise ConflictException(
+                "You have already registered for this session")
+
+        # check if user already registered
+        if wssk in prof.sessionKeysToAttend:
+            retval = False
+        else:
             # register user to attend session
             prof.sessionKeysToAttend.append(wssk)
             retval = True
 
-        # unregister
-        else:
-            # check if user already registered
-            if wssk in prof.sessionKeysToAttend:
-
-                # unregister user, remove session to attend
-                prof.sessionKeysToAttend.remove(wssk)
-                retval = True
-            else:
-                retval = False
-
         # write things back to the datastore & return
         prof.put()
-        sess.put()
         return BooleanMessage(data=retval)
 
     # Wishlist endpoints
@@ -762,7 +756,7 @@ class ConferenceApi(remote.Service):
                      for wssk in prof.sessionKeysToAttend]
         sessions = ndb.get_multi(sess_keys)
 
-        # return set of ConferenceForm objects per Conference
+        # return set of SessionForms objects per Session
         return SessionForms(items=[self._copySessionToForm(sess)
                             for sess in sessions])
 
@@ -771,6 +765,10 @@ class ConferenceApi(remote.Service):
                       name='getProfileByEmail')
     def getProfileByEmail(self, request):
         """Get profile with a user email"""
+        # check for authentication
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
         # get all sessions
         q = Profile.query(Profile.mainEmail == request.mainEmail)
         profile = q.get()
@@ -807,11 +805,12 @@ class ConferenceApi(remote.Service):
                       path='sessions/nonworkshops/before7', http_method='POST',
                       name='nonWorkshopsBefore7')
     def nonWorkshopsBefore7(self, request):
-        """Get next conference to start from current time"""
+        """Get next session to start from current time"""
         # get all sessions
         q = Session.query()
         # extract sessions before 7pm
         time = datetime.strptime('19:00', "%H:%M").time()
+        q = q.filter(Session.startTime != None)
         q = q.filter(Session.startTime <= time)
         q = q.order(Session.startTime)
         sessions = q.fetch()
@@ -838,11 +837,11 @@ class ConferenceApi(remote.Service):
                                  conference_id))
         sessions = sessions.filter(Session.speaker == speaker).fetch()
 
-        if sessions.list > 1:
+        if sessions.length > 1:
             # If there are repeated speakers,
             # format speaker and set it in memcache
             featuredSpeaker = SPEAKER_TPL % (
-                ', '.join(sess.sessionName for sess in sessions))
+                ', '.join(sess.speakerName for sess in sessions))
             memcache.set(MEMCACHE_SPEAKER_KEY, featuredSpeaker)
         else:
             # If there are no featured speaker,
