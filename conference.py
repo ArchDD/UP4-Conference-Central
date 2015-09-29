@@ -597,6 +597,11 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
         user_id = getUserId(user)
 
+        # Check if user is organizer
+        if user_id != getattr(conf, 'organizerUserId'):
+            msg = 'Not organizer of conference'
+            raise endpoints.UnauthorizedException(msg)
+
         if not request.sessionName:
             msg = "Session 'name' field required"
             raise endpoints.BadRequestException(msg)
@@ -617,11 +622,6 @@ class ConferenceApi(remote.Service):
         # check validity
         if not conf:
             raise endpoint.NotFoundException("Non-existing conference")
-
-        # Check if user is organizer
-        if user_id != getattr(conf, 'organizerUserId'):
-            msg = 'Not organizer of conference'
-            raise endpoints.UnauthorizedException(msg)
 
         conference_id = conf.key.id()
         c_key = ndb.Key(Conference, conference_id)
