@@ -636,7 +636,7 @@ class ConferenceApi(remote.Service):
         # create Session, enqueue check speaker task
         Session(**data).put()
         taskqueue.add(params={'speaker': data['speaker'],
-                              'conference_id': conference_id},
+                              'wsck': c_key.urlsafe()},
                       url='/tasks/check_speaker')
         return self._copySessionToForm(s_key.get())
 
@@ -829,19 +829,18 @@ class ConferenceApi(remote.Service):
     # - - - Featured speaker - - - - - - - - - - - - - - - - - - - -
 
     @staticmethod
-    def _cacheFeaturedSpeaker(speaker, conference_id):
+    def _cacheFeaturedSpeaker(speaker, wsck):
         """Checks for featured speaker & assign to memcache; used by
         pull queue.
         """
-        sessions = Session.query(ancestor=ndb.Key(Conference,
-                                 conference_id))
+        sessions = Session.query(ancestor=ndb.Key(urlsafe=wsck).get())
         sessions = sessions.filter(Session.speaker == speaker).fetch()
 
-        if sessions.length > 1:
+        if len(sessions) > 1:
             # If there are repeated speakers,
             # format speaker and set it in memcache
-            featuredSpeaker = SPEAKER_TPL % (
-                ', '.join(sess.speakerName for sess in sessions))
+            featuredSpeaker = SPEAKER_TPL % (speaker,
+                ', '.join(sess.sessionName for sess in sessions))
             memcache.set(MEMCACHE_SPEAKER_KEY, featuredSpeaker)
         else:
             # If there are no featured speaker,

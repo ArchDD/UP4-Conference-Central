@@ -26,7 +26,7 @@ class SetAnnouncementHandler(webapp2.RequestHandler):
 class SetFeaturedSpeakerHandler(webapp2.RequestHandler):
     def post(self):
         """Set FeaturedSpeaker in Memcache."""
-        ConferenceApi._cacheFeaturedSpeaker(self.request.get('speaker'))
+        ConferenceApi._cacheFeaturedSpeaker(self.request.get('speaker'), self.request.get('wsck'))
         self.response.set_status(204)
 
 class SendConfirmationEmailHandler(webapp2.RequestHandler):
@@ -45,6 +45,6 @@ class SendConfirmationEmailHandler(webapp2.RequestHandler):
 
 app = webapp2.WSGIApplication([
     ('/crons/set_announcement', SetAnnouncementHandler),
-    ('/tasks/check_speaker', SetFeaturedSpeakerHandler)
-    ('/tasks/send_confirmation_email', SendConfirmationEmailHandler),
+    ('/tasks/check_speaker', SetFeaturedSpeakerHandler),
+    ('/tasks/send_confirmation_email', SendConfirmationEmailHandler)
 ], debug=True)
